@@ -36,3 +36,29 @@ $uri = rawurldecode(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH));
 
 //Dispatcher FastRoute
 $routeInfo = $dispatcher->dispatch($httpMethod, $uri);
+$response = new Response();
+
+//Analysier le résultat du dispatching
+switch ($routeInfo[0]) {
+    case FastRoute\Dispatcher::NOT_FOUND:
+        $response->error("404 - Page non trouvée", 404);
+        break;
+    case FastRoute\Dispatcher::METHOD_NOT_ALLOWED:
+        $response->error("405 - Méthode non autorisée ", 405);
+        break;
+    case FastRoute\Dispatcher::FOUND:
+        [$controllerClass,$method] = $routeInfo[1];
+        $vars = $routeInfo[2];
+        try{
+            $controller = new $controllerClass();
+            call_user_func_array([$controller, $method], $vars);
+        }catch(\Exception $e){
+            if(Config::get("APP_DEBUG") == true){
+                $response->error("Erreur 500 : " . $e->getMessage(). " dans ". $e->getFile(). ":" . $e->getLine(), 500);
+            }else{
+                (new \App\Utils\logger())->log('ERROR', 'Erreur Serveur :'. $e->getMessage());
+                $response->error("Une erreur interne est survenue .", 500);
+            }
+        }
+        break;
+}
