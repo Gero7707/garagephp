@@ -72,4 +72,4 @@ abstract class BaseController{
             $this->response->redirect('/login');
         }
     }
-}Summary of render
+}
