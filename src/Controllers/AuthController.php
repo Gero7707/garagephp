@@ -46,16 +46,16 @@ class AuthController extends BaseController{
     public function login():void{
 
         //On s'assure que la requète est de type POST
-        if($_SERVER['REQUEST8METHOD'] !== 'POST'){
+        if($_SERVER['REQUEST_METHOD'] !== 'POST'){
 
-            $this->response->redirect('/logon');
+            $this->response->redirect('/login');
         }
 
         $data = $this->getPostData();
 
         //Validation du jeton CSRF
         if(!$this->tokenManager->validateCsrfToken($data['csrf_token'] ?? '')){
-            $this->>response->error('Token de sécurité invalide' , 403);
+            $this->response->error('Token de sécurité invalide.' , 403);
         }
 
         //Le modele user s'occupe de la logique d'authentification
@@ -81,5 +81,126 @@ class AuthController extends BaseController{
         }
     }
 
+    /**
+     * Affichage du formulaire d'inscription 
+     */
+
+    public function showRegister():void{
+        $this->render('auth/register',[
+            'title'=> 'Inscription',
+            'csrf_token' => $this->tokenManager->generateCsrfToken()
+        ]);
+    }
+
+    /**
+     * Traitement des données soumission formulaire inscription
+     */
+
+    public function register():void{
+
+        //On vérifie que la méthode est bien POST sinon on redirige vers register
+        if($_SERVER['REQUEST_METHOD'] !== 'POST'){
+
+            $this->response->redirect('/register');
+        }
+
+        $data = $this->getPostData();
+
+        //Validation du jeton csrf
+        if(!$this->tokenManager->validateCsrfToken($data['csrf_token'] ?? '')){
+            $this->response->error('Token de sécurité invalide.' , 403);
+        }
+
+        //Validation des données du formulaire
+        $errors = $this->validator->validate($data, [
+            'username'=> 'required|min:3|max:50',
+            'email'=> 'required|email',
+            'password'=> 'required|min:9',
+            'password_confirm'=>'required|same:password'
+        ]);
+
+        if(!empty($errors)){
+            $this->render('auth/register' , [
+                'title'=> 'Inscription',
+                'error'=> $errors,
+                'old'=>$data,
+                'csrf_token'=>$this->tokenManager->generateCsrfToken()
+            ]);
+            return;
+        }
+
+        //Vérification de l'email si déjà existant en bdd
+        if($this->userModel->findByEmail($data['email'])){
+            $this->render('auth/register' , [
+                'title'=> 'Inscription',
+                'error'=> ['email'=>['Cette adresse email est déjà utilisée.']],
+                'old'=>$data,
+                'csrf_token'=>$this->tokenManager->generateCsrfToken()
+            ]);
+            return;
+        }
+
+        /**
+         * Si tout est correct alors on crée un nouvel utilisateur 
+         */
+
+        try{
+
+            //On onstancie un nouvel utilisateur
+            $newUser = new User();
+
+            //On utilise les setter pour assigner les valeurs (inclue la validation et le hashage du MDP)
+            $newUser->setUsername($data['username'])
+                    ->setEmail($data['email'])
+                    ->setPassword($data['password'])
+                    ->setRole($data['user']);//Role par défaut 
+
+            
+            //On sauvegarde en BDD
+            if($newUser->save()){
+                //Si la création réussi , on connecte automatiquement l'utilisateur
+                $_SESSION['user_id'] = $newUser->getId();
+                $_SESSION['user_role'] = $newUser->getRole();
+                $_SESSION['username'] = $newUser->getUsername();
+                $this->response->redirect('/cars');
+
+            }else{
+                //Si la sauvegarde échoue
+                throw new \Exception("La création du compte a échouée.");
+            }
+
+        }catch(\Exception $e){
+
+            $this->render('auth/register', [
+                'title'=> 'Inscription',
+                'error'=> "Erreur :" . $e->getMessage(),//Erreur générale
+                'old'=> $data,
+                'csrf_token'=>$this->tokenManager->generateCsrfToken()
+            ]);
+        }
+
+    }
+
+    /**
+     * Méthode de déconnexion  avec destruction de la session
+     */
+
+    public function logout(): void{
+
+            //On vérifie que c'est bien la méthode POST
+        if($_SERVER['REQUEST_METHOD'] !== 'POST'){
+    
+            $this->response->redirect('/');
+        }
+            
+        /**
+         * Détruit toutes les données de la session actuelle
+         */
+        session_destroy();
+
+        //Redirge la page de connexion 
+        $this->response->redirect('/login');
+
+    }
 
 }
